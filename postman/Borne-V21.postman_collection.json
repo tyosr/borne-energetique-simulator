@@ -1,0 +1,269 @@
+{
+  "info": {
+    "name": "Borne Simulator V2.1",
+    "description": "Scénarios API de gestion des consommateurs, accès, réservations, tarifs, sessions, mesures et seuils. Les bornes et mesures sont créées par les simulateurs via MQTT.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "consumerId", "value": "" },
+    { "key": "consumerEmail", "value": "" },
+    { "key": "tagCode", "value": "DEMO-TAG-001" },
+    { "key": "reservationId", "value": "" },
+    { "key": "tariffId", "value": "" },
+    { "key": "commandId", "value": "" },
+    { "key": "sessionId", "value": "" },
+    { "key": "chargingPointId", "value": "A07" }
+  ],
+  "item": [
+    {
+      "name": "Santé",
+      "item": [
+        {
+          "name": "Readiness",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health/ready"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Préparer consommateur et réservation",
+      "item": [
+        {
+          "name": "Créer un consommateur",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('consumerEmail', `demo-${Date.now()}@example.test`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.collectionVariables.set('consumerId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"display_name\": \"Consommateur démo\",\n  \"email\": \"{{consumerEmail}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/consumers"
+          }
+        },
+        {
+          "name": "Créer un tag d'accès",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('tagCode', `DEMO-${Date.now()}`);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consumer_id\": \"{{consumerId}}\",\n  \"code\": \"{{tagCode}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/tags"
+          }
+        },
+        {
+          "name": "Créer une réservation active maintenant",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = Date.now();",
+                  "pm.collectionVariables.set('startsAt', new Date(now - 60000).toISOString());",
+                  "pm.collectionVariables.set('endsAt', new Date(now + 3600000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.collectionVariables.set('reservationId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consumer_id\": \"{{consumerId}}\",\n  \"charging_point_id\": \"{{chargingPointId}}\",\n  \"starts_at\": \"{{startsAt}}\",\n  \"ends_at\": \"{{endsAt}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/reservations"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tarification",
+      "item": [
+        {
+          "name": "Créer un tarif progressif électricité",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.collectionVariables.set('tariffId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tarif démo\",\n  \"resource\": \"ELECTRICITE\",\n  \"version\": 1,\n  \"currency\": \"EUR\",\n  \"tiers\": [\n    { \"lower_bound\": 0, \"upper_bound\": 10, \"unit_price\": 0.20 },\n    { \"lower_bound\": 10, \"upper_bound\": null, \"unit_price\": 0.30 }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/tariffs"
+          }
+        },
+        {
+          "name": "Assigner le tarif à la réservation",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": \"ELECTRICITE\",\n  \"tariff_id\": \"{{tariffId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/reservations/{{reservationId}}/tariffs"
+          }
+        },
+        {
+          "name": "Estimer un coût progressif",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": \"ELECTRICITE\",\n  \"quantity\": 12\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/reservations/{{reservationId}}/cost-estimates"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Activation par tag",
+      "item": [
+        {
+          "name": "Demander l'activation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "  const result = pm.response.json();",
+                  "  pm.collectionVariables.set('commandId', result.command_id);",
+                  "  pm.collectionVariables.set('sessionId', result.session_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tag_code\": \"{{tagCode}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/stations/{{chargingPointId}}/activate"
+          }
+        },
+        {
+          "name": "Consulter la commande",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/commands/{{commandId}}"
+          }
+        },
+        {
+          "name": "Consulter la session",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/sessions/{{sessionId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mesures, consommation et seuils",
+      "item": [
+        {
+          "name": "État de la borne",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/stations/{{chargingPointId}}/state"
+          }
+        },
+        {
+          "name": "Historique des mesures",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/stations/{{chargingPointId}}/measurements?session_id={{sessionId}}"
+          }
+        },
+        {
+          "name": "Consommation de la session",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/consumption"
+          }
+        },
+        {
+          "name": "Définir un seuil électricité",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alert_quantity\": 2,\n  \"cutoff_quantity\": 5\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/stations/{{chargingPointId}}/thresholds/ELECTRICITE"
+          }
+        },
+        {
+          "name": "Événements de seuil de la session",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/sessions/{{sessionId}}/threshold-events"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-borne_v21}
+      POSTGRES_USER: ${POSTGRES_USER:-borne}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-borne_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -t '$$SYS/broker/uptime' -C 1 -W 3 >/dev/null"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-borne}:${POSTGRES_PASSWORD:-borne_dev}@postgres:5432/${POSTGRES_DB:-borne_v21}
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["python", "-m", "backend.api"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-borne}:${POSTGRES_PASSWORD:-borne_dev}@postgres:5432/${POSTGRES_DB:-borne_v21}
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["python", "-m", "backend.worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-borne}:${POSTGRES_PASSWORD:-borne_dev}@postgres:5432/${POSTGRES_DB:-borne_v21}
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  simulator-a07:
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    environment: &simulator-environment
+      BORNE_ID: A07
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+
+  simulator-b12:
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    environment:
+      <<: *simulator-environment
+      BORNE_ID: B12
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+
+  simulator-c03:
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    environment:
+      <<: *simulator-environment
+      BORNE_ID: C03
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  mosquitto_data:

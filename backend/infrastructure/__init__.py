@@ -1,0 +1,2 @@
+"""Adaptateurs techniques du backend."""
+

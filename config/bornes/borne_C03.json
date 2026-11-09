@@ -1,0 +1,29 @@
+{
+  "id_borne": "C03",
+  "hote": "localhost",
+  "port": 1883,
+  "identifiants": {
+    "username": "",
+    "password": ""
+  },
+  "ressources": [
+    "ELECTRICITE",
+    "EAU",
+    "GAZ"
+  ],
+  "intervalle_releve": 15,
+  "profil_simulation": {
+    "ELECTRICITE": {
+      "min": 1.0,
+      "max": 10.0
+    },
+    "EAU": {
+      "min": 2.0,
+      "max": 12.0
+    },
+    "GAZ": {
+      "min": 0.05,
+      "max": 1.5
+    }
+  }
+}

@@ -1,0 +1,2 @@
+"""Présentation HTTP du backend."""
+
